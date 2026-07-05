@@ -1,10 +1,10 @@
-// commonMain/kotlin/com/example/diplomwork/navigation/AppNavigation.kt
 package com.example.diplomwork.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.diplomwork.ui.RequestScreen
 import com.example.diplomwork.ui.checkin.CheckInScreen
 import com.example.diplomwork.ui.checkin.NfcScanScreen
 import com.example.diplomwork.ui.checkin.WifiStatusScreen
@@ -16,7 +16,9 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun AppNavigation(
     onStartNfcScan: ((String) -> Unit) -> Unit,
-    onStopNfcScan: () -> Unit
+    onStopNfcScan: () -> Unit,
+    employeeId: String,
+    onLogout: () -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -26,7 +28,9 @@ fun AppNavigation(
             CheckInScreen(
                 viewModel = viewModel,
                 onNfcClick = { navController.navigate("nfc") },
-                onWifiClick = { navController.navigate("wifi") }
+                onWifiClick = { navController.navigate("wifi") },
+                onRequestClick = { navController.navigate("request") },
+                onLogout = onLogout
             )
         }
         composable("nfc") {
@@ -42,6 +46,11 @@ fun AppNavigation(
             val viewModel = koinViewModel<WifiViewModel>()
             WifiStatusScreen(
                 viewModel = viewModel,
+                onBack = navController::popBackStack
+            )
+        }
+        composable("request") {
+            RequestScreen(
                 onBack = navController::popBackStack
             )
         }

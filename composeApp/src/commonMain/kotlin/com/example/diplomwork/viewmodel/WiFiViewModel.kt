@@ -2,18 +2,17 @@ package com.example.diplomwork.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.diplomwork.data.ApiClient
+import com.example.diplomwork.data.TimeIntervalDto
+import com.example.diplomwork.platform.DateTimeProvider
+import com.example.diplomwork.platform.SessionStorage
 import com.example.diplomwork.platform.WifiChecker
-import com.example.diplomwork.platform.currentTimeString
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
+import kotlinx.datetime.minus
 
 data class WifiNetwork(
     val ssid: String,
@@ -40,18 +39,23 @@ data class WifiState(
 
 // --- ViewModel ---
 
-class WifiViewModel(private val wifiChecker: WifiChecker) : ViewModel() {
+class WifiViewModel(private val wifiChecker: WifiChecker, private val apiClient: ApiClient, private val sessionStorage: SessionStorage) : ViewModel() {
 
     private val _state = MutableStateFlow(WifiState())
     val state: StateFlow<WifiState> = _state.asStateFlow()
 
-    // Список разрешённых рабочих сетей
-    // TODO: загружать из настроек / базы
-    private val allowedSsids = listOf("Office_5G", "Office_2.4G", "AndroidWifi")
+    //private val employeeId = "139ee633-5543-40e5-a4f7-4d845efb5443"
+    private var allowedSsids = listOf("Office_5G", "Office_2.4G", "AndroidWifi")
+
+    private var employeeId: String = ""
 
     init {
-        loadAllowedNetworks()
-        startMonitoring()
+        viewModelScope.launch {
+            employeeId = sessionStorage.getEmployeeId() ?: ""
+            println("WifiViewModel: employeeId загружен = $employeeId")
+            loadAllowedNetworks()
+            startMonitoring()
+        }
     }
 
     fun startMonitoring() {
@@ -68,12 +72,26 @@ class WifiViewModel(private val wifiChecker: WifiChecker) : ViewModel() {
     }
 
     private fun loadAllowedNetworks() {
-        _state.update {
-            it.copy(
-                allowedNetworks = allowedSsids.map { ssid ->
-                    WifiNetwork(ssid = ssid, isAllowed = true)
+        viewModelScope.launch {
+            try {
+                val ssid = apiClient.getEmployeeSsid(employeeId)
+                if (ssid != null) {
+                    println("WifiViewModel: загружена сеть $ssid")
+                    allowedSsids = listOf(ssid)
+                    _state.update {
+                        it.copy(
+                            allowedNetworks = listOf(WifiNetwork(ssid = ssid, isAllowed = true))
+                        )
+                    }
+                    // Перепроверяем текущую сеть
+                    val currentSsid = wifiChecker.getCurrentSsid()
+                    onNetworkChanged(currentSsid)
+                } else {
+                    println("WifiViewModel: SSID не найден для сотрудника")
                 }
-            )
+            } catch (e: Exception) {
+                println("WifiViewModel: ошибка загрузки SSID ${e.message}")
+            }
         }
     }
 
@@ -128,7 +146,7 @@ class WifiViewModel(private val wifiChecker: WifiChecker) : ViewModel() {
 
 
     private fun addEvent(ssid: String, type: WifiEventType, description: String) {
-        val time = currentTimeString()
+        val time = DateTimeProvider().currentTimeString()
 
         val event = WifiEvent(
             time = time,
@@ -145,13 +163,46 @@ class WifiViewModel(private val wifiChecker: WifiChecker) : ViewModel() {
     private fun recordCheckIn(ssid: String) {
         viewModelScope.launch {
             try {
-                // TODO: attendanceRepository.recordEvent(
-                //     employeeId = currentEmployeeId,
-                //     source = RecordSource.WIFI,
-                //     ssid = ssid
-                // )
+                val now = DateTimeProvider()
+                val dateStr = now.currentDateString()
+                val timeStr = now.currentTimeString()
+
+                println("События за сегодня ${_state.value.todayEvents}")
+
+                // Рассчитываем табель за вчера при первом входе сегодня
+                val connectedEventsToday = _state.value.todayEvents
+                    .count { it.type == WifiEventType.CONNECTED }
+                val isFirstEventToday = connectedEventsToday <= 1
+                if (isFirstEventToday) {
+                    val yesterday = getYesterdayDateString()
+                    println("Вчера: ${yesterday}")
+                    println("WifiViewModel: рассчитываем табель за $yesterday")
+                    try {
+                        apiClient.checkAbsence(employeeId, yesterday)
+                        apiClient.calculateTabel(employeeId, yesterday)
+                        println("WifiViewModel: табель за $yesterday рассчитан")
+                    } catch (e: Exception) {
+                        println("WifiViewModel: ошибка расчёта табеля: ${e.message}")
+                    }
+                }
+
+                // Записываем приход
+                apiClient.recordTimeInterval(
+                    TimeIntervalDto(
+                        employeeId = employeeId,
+                        date = dateStr,
+                        recordSource = "WIFI",
+                        startTime = "${dateStr}T${timeStr}:00",
+                        endTime = null,
+                        updateTime = "${dateStr}T${timeStr}:00"
+                    )
+                )
+
+                println("WifiViewModel: recordCheckIn успешно записано")
+
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message) }
+                println("WifiViewModel: recordCheckIn ОШИБКА ${e.message}")
+                _state.update { it.copy(error = "Ошибка записи прихода: ${e.message}") }
             }
         }
     }
@@ -159,14 +210,89 @@ class WifiViewModel(private val wifiChecker: WifiChecker) : ViewModel() {
     private fun recordCheckOut() {
         viewModelScope.launch {
             try {
-                // TODO: attendanceRepository.recordCheckOut(
-                //     employeeId = currentEmployeeId,
-                //     source = RecordSource.WIFI
-                // )
+                val now = DateTimeProvider()
+                val dateStr = now.currentDateString()
+                val timeStr = now.currentTimeString()
+
+                println("WifiViewModel: recordCheckOut date=$dateStr time=$timeStr")
+
+                val intervals = apiClient.getTimeIntervals(
+                    employeeId = employeeId,
+                    date = dateStr
+                )
+
+                println("WifiViewModel: найдено интервалов=${intervals.size}")
+                intervals.forEach { println("WifiViewModel: интервал id=${it.id} endTime=${it.endTime}") }
+
+                val lastOpen = intervals.lastOrNull { it.endTime == null }
+                println("WifiViewModel: lastOpen=$lastOpen")
+
+                if (lastOpen != null && lastOpen.id != null) {
+                    val endTimeStr = "${dateStr}T${timeStr}:00"
+                    println("WifiViewModel: закрываю интервал id=${lastOpen.id} endTime=$endTimeStr")
+                    apiClient.updateTimeInterval(
+                        id = lastOpen.id,
+                        endTime = endTimeStr
+                    )
+                    println("WifiViewModel: интервал закрыт")
+                } else {
+                    println("WifiViewModel: открытый интервал не найден")
+                }
+
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message) }
+                println("WifiViewModel: recordCheckOut ОШИБКА ${e::class.simpleName}: ${e.message}")
+                _state.update { it.copy(error = "Ошибка записи ухода: ${e.message}") }
             }
         }
+    }
+
+    // Временные методы для тестирования — УДАЛИТЬ ПОСЛЕ ТЕСТОВ
+    fun simulateCheckIn() {
+        val fakeSsid = allowedSsids.first()
+        _state.update {
+            it.copy(
+                currentSsid = fakeSsid,
+                isWorkNetwork = true
+            )
+        }
+        addEvent(
+            ssid = fakeSsid,
+            type = WifiEventType.CONNECTED,
+            description = "приход"
+        )
+        recordCheckIn(fakeSsid)
+    }
+
+    fun simulateCheckOut() {
+        val previousSsid = _state.value.currentSsid ?: allowedSsids.first()
+        _state.update {
+            it.copy(
+                currentSsid = null,
+                isWorkNetwork = false
+            )
+        }
+        addEvent(
+            ssid = previousSsid,
+            type = WifiEventType.DISCONNECTED,
+            description = "уход / пауза"
+        )
+        recordCheckOut()
+    }
+
+    private fun getYesterdayDateString(): String {
+        val provider = DateTimeProvider()
+        val today = provider.currentDateString()
+        println("WifiViewModel: getYesterdayDateString today='$today' provider=$provider")
+
+        val parts = today.split("-")
+        if (parts.size < 3) return today
+        val date = kotlinx.datetime.LocalDate(
+            parts[0].toInt(),
+            parts[1].toInt(),
+            parts[2].toInt()
+        )
+        val yesterday = date.minus(1, kotlinx.datetime.DateTimeUnit.DAY)
+        return "${yesterday.year}-${yesterday.monthNumber.toString().padStart(2, '0')}-${yesterday.dayOfMonth.toString().padStart(2, '0')}"
     }
 
     fun refresh() {

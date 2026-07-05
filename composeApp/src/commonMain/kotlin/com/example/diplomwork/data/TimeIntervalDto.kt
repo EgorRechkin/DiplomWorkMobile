@@ -9,5 +9,5 @@ data class TimeIntervalDto(
     val recordSource: String,
     val startTime: String,
     val endTime: String? = null,
-    val updateTime: String
+    val updateTime: String? = null  // ← должно быть nullable
 )

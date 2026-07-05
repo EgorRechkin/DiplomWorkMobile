@@ -7,4 +7,5 @@ import org.koin.dsl.module
 actual val platformModule: Module = module {
     // iOS не требует Context
     single { WifiChecker() }
+    single { SessionStorage() }
 }

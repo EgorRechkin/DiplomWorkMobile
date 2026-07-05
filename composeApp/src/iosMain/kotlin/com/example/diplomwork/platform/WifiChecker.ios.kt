@@ -1,37 +1,51 @@
 package com.example.diplomwork.platform
 
-import platform.Foundation.NSBundle
+import platform.Foundation.NSTimer
 import platform.NetworkExtension.NEHotspotNetwork
 
 actual class WifiChecker {
 
     private var monitoring = false
     private var monitoringCallback: ((String?) -> Unit)? = null
+    private var timer: NSTimer? = null
 
-    actual suspend fun getCurrentSsid(): String? {
-        // На iOS SSID доступен только через NEHotspotNetwork
-        // Требует entitlement: com.apple.developer.networking.wifi-info
-        var result: String? = null
-        NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
-            result = network?.SSID
+    actual suspend fun getCurrentSsid(): String? =
+        suspendCoroutine { continuation ->
+            NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
+                continuation.resume(network?.SSID)
+            }
         }
-        return result
-    }
-
-    actual fun isOnWorkNetwork(ssid: String): Boolean {
-        val workNetworks = listOf("Office_5G", "Office_2.4G")
-        return workNetworks.contains(ssid)
-    }
 
     actual fun startMonitoring(onNetworkChanged: (String?) -> Unit) {
         monitoringCallback = onNetworkChanged
         monitoring = true
-        // iOS не даёт фонового мониторинга WiFi без entitlement
-        // Вызываем при каждом foreground через AppDelegate/SceneDelegate
+
+        // Проверяем сеть каждые 30 секунд
+        timer = NSTimer.scheduledTimerWithTimeInterval(
+            interval = 30.0,
+            repeats = true
+        ) {
+            if (monitoring) {
+                NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
+                    onNetworkChanged(network?.SSID)
+                }
+            }
+        }
+
+        // Первая проверка сразу
+        NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
+            onNetworkChanged(network?.SSID)
+        }
     }
 
     actual fun stopMonitoring() {
         monitoring = false
         monitoringCallback = null
+        timer?.invalidate()
+        timer = null
+    }
+
+    actual fun isOnWorkNetwork(ssid: String): Boolean {
+        return false // загружается из БД через ViewModel
     }
 }

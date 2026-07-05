@@ -61,5 +61,5 @@ private fun TimeIntervalDto.toDomain() = TimeInterval(
     recordSource = RecordSource.fromString(recordSource),
     startTime = LocalDateTime.parse(startTime),
     endTime = endTime?.let { LocalDateTime.parse((it)) },
-    updateTime = LocalDateTime.parse(updateTime)
+    updateTime = updateTime?.let { LocalDateTime.parse((it)) }
 )

@@ -17,8 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.diplomwork.viewmodel.NfcResult
 import com.example.diplomwork.viewmodel.NfcState
@@ -43,15 +51,36 @@ fun NfcScanScreen(
     onStopScan: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        //TopBar(title = "NFC", onBack = onBack)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = {
+                viewModel.reset()
+                onBack()
+            }) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Назад"
+                )
+            }
+            Text(
+                text = "NFC сканирование",
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(48.dp))
 
-        // Анимированная иконка NFC — пульсация через animate*AsState
+        // Анимированная иконка
         val scale by animateFloatAsState(
             targetValue = if (state is NfcState.Scanning) 1.1f else 1f,
             animationSpec = infiniteRepeatable(
@@ -62,38 +91,130 @@ fun NfcScanScreen(
 
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(120.dp)
                 .scale(scale)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            /*Icon(
-                painter = painterResource(Res.drawable),
-                contentDescription = "NFC",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
-            )*/
+            Text(
+                text = "NFC",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         when (val s = state) {
             is NfcState.Scanning -> {
-                Text("Поднесите карточку", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Поднесите карточку",
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Text(
                     "к задней панели телефона",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            is NfcState.Success -> NfcSuccessCard(result = s.result)
-            is NfcState.Error -> {}//NfcErrorCard(message = s.message)
-            is NfcState.Idle -> {}
+            is NfcState.Success -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = if (s.result.isCheckIn) "✓ Приход зафиксирован"
+                            else "✓ Уход зафиксирован",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF4CAF50)
+                        )
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Сотрудник:", style = MaterialTheme.typography.bodyMedium)
+                            Text(s.result.employeeName, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Табельный №:", style = MaterialTheme.typography.bodyMedium)
+                            Text(s.result.tabelNumber, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Время:", style = MaterialTheme.typography.bodyMedium)
+                            Text(s.result.time, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { viewModel.reset() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1A1A1A)
+                    )
+                ) {
+                    Text("Сканировать снова")
+                }
+            }
+            is NfcState.Error -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Ошибка",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = s.message,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { viewModel.reset() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Попробовать снова")
+                }
+            }
+            is NfcState.Idle -> {
+                Text(
+                    "Готов к сканированию",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 
     LaunchedEffect(Unit) {
+        viewModel.startScan()
         onStartScan { employeeId ->
             viewModel.onTagRead(employeeId)
         }
@@ -102,29 +223,6 @@ fun NfcScanScreen(
     DisposableEffect(Unit) {
         onDispose {
             onStopScan()
-        }
-    }
-}
-
-@Composable
-fun NfcSuccessCard(result: NfcResult) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            //InfoRow(label = "Сотрудник", value = result.employeeName)
-            //InfoRow(label = "Табельный №", value = result.tabelNumber)
-            //InfoRow(label = "Время", value = result.time)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Статус", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-               // StatusBadge(status = result.status)
-            }
         }
     }
 }

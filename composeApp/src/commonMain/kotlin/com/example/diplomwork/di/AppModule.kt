@@ -6,6 +6,7 @@ import com.example.diplomwork.data.AttendanceRepositoryImpl
 import com.example.diplomwork.data.WorkTimeCalculator
 import com.example.diplomwork.domain.AttendanceRepository
 import com.example.diplomwork.domain.AttendanceUseCase
+import com.example.diplomwork.viewmodel.AuthViewModel
 import com.example.diplomwork.viewmodel.CheckInViewModel
 import com.example.diplomwork.viewmodel.NfcViewModel
 import com.example.diplomwork.viewmodel.ScheduleViewModel
@@ -19,9 +20,8 @@ val appModule = module {
     single { AttendanceUseCase(get()) }
     single { WorkTimeCalculator() }
     viewModel { CheckInViewModel(get(), get()) }
-    viewModel { NfcViewModel() }
-    viewModel { WifiViewModel(get()) }
-    viewModel { ScheduleViewModel(get()) }
-
-
+    viewModel { NfcViewModel(get(), get()) }
+    viewModel { WifiViewModel(get(), get(), get()) }
+    viewModel { ScheduleViewModel(get(), get()) }
+    viewModel { AuthViewModel(get(), get()) }
 }

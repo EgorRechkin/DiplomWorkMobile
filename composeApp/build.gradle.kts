@@ -60,6 +60,11 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             // Navigation
             implementation(libs.navigation.compose)
+
+            implementation(compose.material3)
+            implementation(compose.materialIconsExtended)
+            implementation(libs.datastore.preferences)
+
         }
         iosMain.dependencies {
             // Ktor — iOS движок

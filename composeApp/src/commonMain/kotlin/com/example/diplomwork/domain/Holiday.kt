@@ -7,5 +7,5 @@ data class Holiday(
     val nameId: String,
     val startDate: LocalDate,
     val endDate: LocalDate,
-    val isDayBeforeShort: Boolean  // предпраздничный день, −1ч по ТК РФ
+    val isDayBeforeShort: Boolean
 )
